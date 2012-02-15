@@ -23,44 +23,6 @@ with open('stoplist.txt',  'r') as stops:
     for word in stops:
         english_ignore.add(stemmer.stemWord(word.strip()))
 
-class TwitGather(Thread):
-    """ Consumer of words that you want to extract from twitter. 
-        Send it words to query for and it will collect them 
-        """
-
-    def __init__(self, q,  page=1):
-        Thread.__init__(self)
-        self.page = page
-        self.base = "http://search.twitter.com/search.json?"
-        self.queue = q
-
-
-    def send(self, data):
-        self.queue.put(data)
-
-    def close(self):
-        self.queue.put(None)
-        self.queue.join()
-
-    def run(self):
-        while True:
-            words = self.queue.get()
-            if words is None:
-                break
-            options = {'lang':'en', 'result_type':'mixed',
-                    'include_entities':1,'page':page, 'rpp':100,
-                    'q': ' '.join(words)}
-            try:
-                with urlopen(self.base + urlencode(options),timeout=.5) as data:
-                    json.load(data)
-                    # TODO Do something with the received json data
-            except URLError:
-
-                pass
-            self.queue.task_done()
-            return
-
-
 class DataConsumer(Process):
     """ Consumer process that will extract data given a Joinable queue """
 
