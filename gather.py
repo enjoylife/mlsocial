@@ -1,7 +1,7 @@
 import json
 from urllib import urlencode
 from urllib2 import urlopen, URLError
-from multiprocessing import Process, Array
+from multiprocessing import Process, Array, JoinableQueue
 from Queue import Queue
 from threading import Thread
 
@@ -12,23 +12,28 @@ def gen_stops():
         for word in stops:
             english_ignore.append(Array('u', word.strip(), lock=False))
 
-
-class DataConsumer(Process):
-    """ Consumer process that will extract data given a Joinable queue """
-
-    def __init__(self, q, stemmer, data):
-        Process.__init__(self)
-        self.input_q = q
-        self.stemmer = stemmer 
-        self.stoplist = gen_stops()
-        self.data = data
-
-    def coroutine(func):
+def coroutine(func):
         def start(*args,**kwargs):
             g = func(*args,**kwargs)
             g.next()
             return g
         return start
+
+
+class DataConsumer(Process):
+    """ Consumer process that will extract data given a Joinable queue """
+
+    def __init__(self, q, stemmer=None):
+        Process.__init__(self)
+        self.input_q = q
+        self.daemon = True
+
+        if not stemmer: 
+            from Stemmer import Stemmer 
+            self.stemmer = Stemmer('english')
+
+        self.stoplist = gen_stops()
+
 
     def text_filter():
         pass
@@ -37,7 +42,7 @@ class DataConsumer(Process):
         while True:
             data = self.input_q.get()
             # Replace with real extraction work later
-            print data 
+            print ('entered run of data consumer')
             self.input_q.task_done()
 
     
@@ -46,7 +51,7 @@ class Gatherer(Thread):
 
     def __init__(self):
         Thread.__init__(self)
-        self.queue = Queue()
+        self.queue = JoinableQueue()
 
     def send(self, data):
         self.queue.put(data)
@@ -63,10 +68,12 @@ class TwitGather(Gatherer):
         Send it words to query for and it will collect them 
         """
 
-    def __init__(self, page=1):
+    def __init__(self,outq, page=1):
         Gatherer.__init__(self)
+        self.outq = outq
         self.page = page
         self.base = "http://search.twitter.com/search.json?"
+
     def run(self):
         while True:
             words = self.queue.get()
@@ -76,24 +83,31 @@ class TwitGather(Gatherer):
                     'include_entities':1,'page':self.page, 'rpp':100,
                     'q': ' '.join(words)}
             try:
-                data= urlopen(self.base + urlencode(options),timeout=.5) 
-                json.load(data)
+                jfile = urlopen(self.base + urlencode(options),timeout=.5) 
+                fp =jfile.read()
+                self.outq.put(fp)
+                print fp[0:22]
                 print ('loaded data')
-                # TODO Do something with the received json data
                 self.queue.task_done()
-            except URLError:
+            except Exception as e:
+                print "failure in Twit gather url call "
+                print e
                 self.queue.task_done()
         self.queue.task_done()
         return
 
 def twit_test():
     try:
-        twit = TwitGather()
+        outqueue = JoinableQueue()
+        twit = TwitGather(outqueue)
         twit.start() 
         twit.send(['words'])
-        twit.send(['test'])
         twit.close()
-        print ("I closed")
+        print "twit closed"
+        cmonster = DataConsumer(outqueue)
+        cmonster.start()
+        outqueue.join()
+        print ("cmonsterclosed closed")
     except Exception as e:
         print ("I failed")
         print e
