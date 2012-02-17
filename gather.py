@@ -143,6 +143,7 @@ def twit_test():
         twit = TwitGather(outqueue,1)
         twit.start() 
         twit.send(['words'])
+        twit.send(['school'])
         twit.close()
         print "twit closed"
         outqueue.join()

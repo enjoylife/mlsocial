@@ -1,4 +1,5 @@
-from multiprocessing import Process, Array, JoinableQueue
+# -*- coding: utf-8 -*-
+from multiprocessing import  Array 
 from Stemmer import Stemmer
 
 def coroutine(func):
@@ -15,14 +16,7 @@ def gen_stops():
         for word in stops:
             english_ignore.append(Array('u', word.strip(), lock=True))
     return frozenset(english_ignore)
- 
-    def sent_filter(self):
-        sentence = None
-        while True:
-            sentence = (yield word)
-            word = [w for w in text if len(w) > 2 and w not in self.stoplist]
-    
- 
+
 class TextEater(object):
     
     def __init__(self):
@@ -31,33 +25,49 @@ class TextEater(object):
     
     @coroutine
     def sent_filter(self,target):
+        word = ''
         print "ready to eat lines"
         while True:
             sentence = (yield)
-            for word in sentence.split():
-                target.send(word)
+            target.send((sentence.lower()).split())
 
     @coroutine
-    def word_filter(self):
+    def word_filter(self, target):
         print "ready to eat words"
         while True:
             raw = (yield)
-            if raw not in self.stoplist:
-                print self.stemmer.stemWord(raw)
-            
+            if raw not in self.stoplist and len(raw) > 2:
+                target.send(self.stemmer.stemWord(raw))
+
     @coroutine
-    def typer(self):
+    def ngrams(self,target, n=2, padding=False):
+        "Compute n-grams with optional padding"
+        while True:
+            words= (yield)
+            pad = [] if not padding else [None]*(n-1)
+            grams = pad + words + pad
+            for i in range(0, len(grams) - (n - 1)):
+                target.send(tuple(grams[i:i+n]))
+               
+    @coroutine
+    def printer(self):
+        while True:
+            line = (yield)
+            print (line)
+
+    @coroutine
+    def typer(self,target):
         print "ready to check type"
         word = None
         while True:
             line = (yield word)
             word=  type(line)
 
-          
+
 if __name__ == '__main__':
-    text_eater = TextEater()
-    s = text_eater.sent_filter(text_eater.word_filter())
-    t = text_eater.typer()
+    t = TextEater()
+    s = t.sent_filter(t.ngrams(t.printer()))
+    s.send('This is a test sentence and that has lots of words')
 
 
 
