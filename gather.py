@@ -5,6 +5,7 @@ from urllib2 import urlopen, URLError
 from multiprocessing import Process, Array, JoinableQueue
 from Queue import Queue
 from threading import Thread
+from Stemmer import Stemmer
 
 def gen_stops():
     english_ignore = []
@@ -21,38 +22,97 @@ def coroutine(func):
         return start
 
 
-class TwitterConsumer(Process):
+class StringEater(object):
+    
+    def __init__(self):
+        self.stoplist = gen_stops()
+        self.stemmer = Stemmer('english')
+
+    def eat_text(self, counter, ngram_size=2):
+        return self.sent_filter(self.word_filter(
+            (self.word_store(counter),self.ngram_count(counter,ngram_size)
+                )))
+
+    @coroutine
+    def sent_filter(self,target):
+        word = ''
+        print "ready to eat lines"
+        while True:
+            sentence = (yield)
+            target.send((sentence.lower()).split())
+
+    @coroutine
+    def word_filter(self, targets):
+        print "ready to eat words"
+        while True:
+            raw = (yield)
+            for t in targets:
+                t.send([self.stemmer.stemWord(w) for w 
+                    in raw if len(w)<=3 or w in self.stoplist])
+
+    @coroutine
+    def word_count(self, counter):
+        while True:
+            words = (yield)
+            counter[word] += 1
+
+    @coroutine
+    def ngram_count(self,counter, n=2,):
+        "Compute n-grams" 
+        while True:
+            grams= (yield)
+            for i in range(0, len((grams)) - (n - 1)):
+                counter[(tuple(grams[i:i+n]))] += 1
+               
+    @coroutine
+    def printer(self):
+        while True:
+            line = (yield)
+            print (line)
+
+    @coroutine
+    def typer(self,target):
+        print "ready to check type"
+        word = None
+        while True:
+            line = (yield word)
+            word=  type(line)
+
+
+class RedisStringEater(StringEater):
+    # TODO: Implement Redis hash and smembers or something
+
+    def __init__(self):
+        StringEater.__init__(self)
+
+    def eat_text(self, counter, ngram_size=2):
+        return self.sent_filter(self.word_filter(
+            (self.word_store(),self.ngram_count(ngram_size))))
+
+    @coroutine
+    def word_count(self):
+        while True:
+            words = (yield)
+            #counter[word] += 1
+
+    @coroutine
+    def ngram_count(self, n=2,):
+        "Compute n-grams" 
+        while True:
+            grams= (yield)
+            for i in range(0, len((grams)) - (n - 1)):
+               # counter[(tuple(grams[i:i+n]))] += 1
+               
+
+class TwitterConsumer(Process, StringEater):
     """ Consumer process that will extract data given a Joinable queue """
 
     def __init__(self, q,stops=None, stemmer=None):
         Process.__init__(self)
+        StringEater.__init__(self)
         self.input_q = q
         self.daemon = True
-
-        if not stemmer: 
-            from Stemmer import Stemmer 
-            self.stemmer = Stemmer('english')
-
-        if not stops: self.stoplist = gen_stops()
- 
-    @coroutine
-    def sent_filter(self,target):
-        print "ready to eat lines"
-        while True:
-            sentence = (yield)
-            for word in sentence.split():
-                target.send(word)
-
-
-    @coroutine
-    def word_filter(self):
-        print "ready to eat words"
-        word = None
-        while True:
-            raw = (yield)
-            if raw not in self.stoplist:
-                print self.stemmer.stemWord(raw)
-       
+      
     @coroutine
     def tweet_filter(self, target):
         while True:
@@ -75,9 +135,7 @@ class TwitterConsumer(Process):
 
     def run(self):
         while True:
-            flow = self.tweet_filter(self.sent_filter(self.word_filter()))
             data = self.input_q.get()
-            flow.send(data)
             print ('Exited run of data consumer')
             self.input_q.task_done()
 
@@ -101,7 +159,7 @@ class Gatherer(Thread):
 
 class TwitGather(Gatherer):
     """ Consumer of words that you want to extract from twitter. 
-        Send it words to query for and it will collect them 
+        Send it words in a tuple to query for and it will collect them 
         """
 
     def __init__(self,outq, pages=1):
@@ -123,7 +181,7 @@ class TwitGather(Gatherer):
                 for page in xrange(1, self.pages+1):
                     options['page'] = page
                     print('getting page %s' %page)
-                    jfile = urlopen(self.base + urlencode(options),timeout=.5) 
+                    jfile = urlopen(self.base + urlencode(options),timeout=1) 
                     # TODO Need more specialed error checking
                     self.outq.put(json.load(jfile))
                 print ('loaded data')

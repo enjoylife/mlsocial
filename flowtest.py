@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from multiprocessing import  Array 
+from collections import Counter
+from multiprocessing import  Array ,Queue
 from Stemmer import Stemmer
 
 def coroutine(func):
@@ -36,18 +37,17 @@ class TextEater(object):
         print "ready to eat words"
         while True:
             raw = (yield)
-            if raw not in self.stoplist and len(raw) > 2:
-                target.send(self.stemmer.stemWord(raw))
+            target.send([self.stemmer.stemWord(w) for w in raw if len(w)<=3 or 
+                    w in self.stoplist])
+
 
     @coroutine
-    def ngrams(self,target, n=2, padding=False):
-        "Compute n-grams with optional padding"
+    def ngrams(self,container, n=2,):
+        "Compute n-grams" 
         while True:
-            words= (yield)
-            pad = [] if not padding else [None]*(n-1)
-            grams = pad + words + pad
-            for i in range(0, len(grams) - (n - 1)):
-                target.send(tuple(grams[i:i+n]))
+            grams= (yield)
+            for i in range(0, len((grams)) - (n - 1)):
+                container[(tuple(grams[i:i+n]))]+=1
                
     @coroutine
     def printer(self):
@@ -65,9 +65,12 @@ class TextEater(object):
 
 
 if __name__ == '__main__':
+    cnt = Counter()
     t = TextEater()
-    s = t.sent_filter(t.ngrams(t.printer()))
-    s.send('This is a test sentence and that has lots of words')
+    s = t.sent_filter(t.word_filter(t.ngrams(cnt)))
+    #s = t.sent_filter(t.printer())
+    s.send("this is the best senence ever for testing")
+    print cnt
 
 
 
