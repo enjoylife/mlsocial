@@ -1,2 +1,9 @@
 Collection of tools and experiments I am working
-on through out the school year.
+on during the school year.
+
+# Contaings:
+
+* multi process safe stop list 
+* Coroutines for text processing
+* Threaded TwitterGatherer for basic searching of words
+* Multitasked Twitter Consumer for processing of twitter search response
