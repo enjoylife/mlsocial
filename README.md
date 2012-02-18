@@ -1,7 +1,8 @@
 Collection of tools and experiments I am working
 on during the school year.
 
-# Contaings:
+Contains:
+-----------
 
 * multi process safe stop list 
 * Coroutines for text processing
